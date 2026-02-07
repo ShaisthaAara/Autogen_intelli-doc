@@ -1,4 +1,3 @@
-import json
 import autogen
 
 from agents.summary_agent import create_summary_agent
@@ -23,39 +22,53 @@ class MultiAgentOrchestrator:
 
     def process_document(self, document_text):
 
-        chunks = chunk_document(document_text)
+        tagged_chunks = chunk_document(document_text)
 
-        combined_context = "\n\n".join(chunks)
+        # --- Route chunks ---
+        action_chunks = []
+        risk_chunks = []
+        all_chunks = []
+
+        for chunk in tagged_chunks:
+            text = chunk["text"]
+            tags = chunk["tags"]
+
+            all_chunks.append(text)
+
+            if "action" in tags:
+                action_chunks.append(text)
+
+            if "risk" in tags:
+                risk_chunks.append(text)
+
+        # fallback if empty
+        action_context = "\n\n".join(action_chunks) if action_chunks else ""
+        risk_context = "\n\n".join(risk_chunks) if risk_chunks else ""
+        summary_context = "\n\n".join(all_chunks)
 
         # ---- Summary ----
         summary_response = self.user_proxy.initiate_chat(
             self.summary_agent,
-            message=combined_context,
+            message=summary_context,
             max_turns=1
-
         )
-
-        summary_text = summary_response.summary
 
         # ---- Actions ----
         action_response = self.user_proxy.initiate_chat(
             self.action_agent,
-            message=combined_context,
+            message=action_context,
             max_turns=1
-
         )
 
         # ---- Risks ----
         risk_response = self.user_proxy.initiate_chat(
             self.risk_agent,
-            message=combined_context,
+            message=risk_context,
             max_turns=1
-
         )
 
         return {
-            "summary": summary_text,
+            "summary": summary_response.summary,
             "actions": action_response.summary,
-            "risks": risk_response.summary, 
-            # "riskser": risk_response.cost
+            "risks": risk_response.summary
         }
